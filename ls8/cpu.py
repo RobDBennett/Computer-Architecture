@@ -1,13 +1,56 @@
 """CPU functionality."""
 
 import sys
+import os.path
+
+HLT  = 0b00000001
+LDI  = 0b10000010
+PRN  = 0b01000111
+MUL  = 0b10100010
+PUSH = 0b01000101
+POP  = 0b01000110
+CALL = 0b01010000
+RET  = 0b00010001
+ADD  = 0b10100000
 
 class CPU:
     """Main CPU class."""
 
     def __init__(self):
         """Construct a new CPU."""
-        pass
+        # 256-byte RAM, each element is 1 byte. Can only store integers 0-255
+        self.ram = [0] *256
+
+        #R0-R7: 8-bit registers.
+        #R5= interrupt mask (IM)
+        #R6= Interrupt status (IS)
+        #R7= stack pointer (SP)
+        self.reg = [0] * 8
+
+        # Internal Registers
+        self.pc = 0 #Program Counter: address of currently executing instruction
+        self.ir = 0 #Instruction Register: contains a copy of the currently executing instruction
+        self.mar = 0 #Memory Address Register: holds the memory address we're read/writing.
+        self.mdr = 0 #Memory Data RegisterL holds the value to write or the value to read.
+        self.fl = 0 #Flag Register: holds the current flags status
+        self.halted = False
+
+        #Initialize the Stack Pointer
+        #SP points at the value at the top of the stack (most recently pushed), or at address F4.
+        self.reg[7] = 0xF4
+
+    def ram_read(self, mar):
+        if mar >= 0 and mar < len(self.ram):
+            return self.ram[mar]
+        else:
+            print(f'Error: attempted to read from memory address: {mar}, which is outside of the memory.')
+            return -1
+
+    def ram_write(self, mar, mdr):
+        if mar >= 0 and mar < len(self.ram):
+            self.ram[mar] = mdr #& 0xFF
+        else:
+            print(f'Error: attempted to write to memory address: {mar}, which is outside the memory.')
 
     def load(self):
         """Load a program into memory."""
@@ -62,4 +105,16 @@ class CPU:
 
     def run(self):
         """Run the CPU."""
-        pass
+        while self.halted is False:
+            ir = self.ram_read(self.pc) #Instruction register
+            operand_a = self.ram_read(self.pc + 1)
+            operand_b = self.ram_read(self.pc + 2)
+            if ir == HLT:
+                self.halted = True
+                self.pc += 1
+            elif ir == PRN:
+                print(self.reg[operand_a])
+                self.pc += 2
+            elif ir == LDI:
+                self.reg[operand_a] = operand_b
+                self.pc += 3
