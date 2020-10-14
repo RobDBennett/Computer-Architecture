@@ -12,6 +12,12 @@ POP  = 0b01000110
 CALL = 0b01010000
 RET  = 0b00010001
 ADD  = 0b10100000
+JMP = 0b01010100
+JEQ = 0b01010101
+JNE = 0b01010110
+CMP = 0b10100111
+AST = 0b01001111 #Raw creation. 1 operations (01). Not ALU (0). Not pointer(0).1111 for ease.
+
 
 class CPU:
     """Main CPU class."""
@@ -32,12 +38,59 @@ class CPU:
         self.ir = 0 #Instruction Register: contains a copy of the currently executing instruction
         self.mar = 0 #Memory Address Register: holds the memory address we're read/writing.
         self.mdr = 0 #Memory Data RegisterL holds the value to write or the value to read.
-        self.fl = 0 #Flag Register: holds the current flags status
+        self.fl = 0 #Flag Register: holds the current flags status *might change
         self.halted = False
 
         #Initialize the Stack Pointer
         #SP points at the value at the top of the stack (most recently pushed), or at address F4.
         self.reg[7] = 0xF4
+
+        #Set up Branch Table (will add more as we go):
+        self.branchtable = {}
+        self.branchtable[HLT] = self.execute_HLT
+        self.branchtable[LDI] = self.execute_LDI
+        self.branchtable[PRN] = self.execute_PRN
+        self.branchtable[MUL] = self.execute_MUL
+        self.branchtable[PUSH] = self.execute_PUSH
+        self.branchtable[POP] = self.execute_POP
+        self.branchtable[CALL] = self.execute_CALL
+        self.branchtable[RET] = self.execute_RET
+        self.branchtable[ADD] = self.execute_ADD
+        self.branchtable[CMP] = self.execute_CMP
+        self.branchtable[JMP] = self.execute_JMP
+        self.branchtable[JEQ] = self.execute_JEQ
+        self.branchtable[JNE] = self.execute_JNE
+        self.branchtable[AST] = self.execute_AST
+
+    # Property wrapper is very powerful to set/get function.
+    @property
+    def sp(self): #Gets Stack Pointer
+        return self.reg[7]
+    
+    @sp.setter
+    def sp(self, a): #Sets Stack Pointer
+        self.reg[7] = a & 0xFF
+
+    @property
+    def operand_a(self): #Sets operand_a when necessary.
+        return self.ram_read(self.pc + 1)
+    
+    @property
+    def operand_b(self): #Sets operand_b when necessary.
+        return self.ram_read(self.pc + 2)
+    
+    @property
+    def instruction_size(self): #Taken from lecture short-hand. 
+        #The first 2 places of the command are how many instructions to do.
+        return ((self.ir >> 6) & 0b11) + 1 
+    
+    @property
+    def instruction_sets_pc(self): #Taken from lecture short-hand.
+        #From instruction layout- place 4 determines if this sets the PC.
+        return ((self.ir >> 4) & 0b0001) == 1
+
+
+    #Base CPU Methods.
 
     def ram_read(self, mar):
         if mar >= 0 and mar < len(self.ram):
@@ -53,25 +106,46 @@ class CPU:
             print(f'Error: attempted to write to memory address: {mar}, which is outside the memory.')
 
     def load(self):
-        """Load a program into memory."""
-
+        """Load a program into memory.
+        Classnotes-
         address = 0
-
-        # For now, we've just hardcoded a program:
-
-        program = [
-            # From print8.ls8
-            0b10000010, # LDI R0,8
-            0b00000000,
-            0b00001000,
-            0b01000111, # PRN R0
-            0b00000000,
-            0b00000001, # HLT
-        ]
-
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
+        with open("program1.txt") as f:
+            for line in f:
+                line = line.strip()
+                if line == '' or line[0] == "#":
+                    continue
+                try:
+                    str_value = line.split("#")[0]
+                    value = int(str_value)
+                
+                except ValueError:
+                    print(f"Invalid number: {str_value}")
+                    sys.exit(1)
+                memory[address] = value
+                address += 1
+        """
+        if len(sys.argv) != 2:
+            print('Invalid number of args')
+            sys.exit(1)
+        
+        try:
+            with open(f'examples/{sys.argv[1]}') as f:
+                address = 0
+                for line in f:
+                    line = line.strip()
+                    if line == '' or line[0] == "#":
+                        continue
+                    num = line.split('#')[0].strip()
+                    try:
+                        instruction = int(num, 2)
+                        self.ram[address] = instruction
+                        address += 1
+                    except:
+                        print("Can't convert string to number")
+                        continue
+        except:
+            print(f"Could not find file named: {sys.arg[1]}")
+            sys.exit(1)
 
 
     def alu(self, op, reg_a, reg_b):
@@ -79,6 +153,13 @@ class CPU:
 
         if op == "ADD":
             self.reg[reg_a] += self.reg[reg_b]
+            
+        elif op == 'MUL':
+            self.reg[reg_a] *= self.reg[reg_b]
+
+        elif op == "CMP":
+            self.fl = 1 if self.reg[reg_a] == self.reg[reg_b] else 0
+
         #elif op == "SUB": etc
         else:
             raise Exception("Unsupported ALU operation")
@@ -91,7 +172,7 @@ class CPU:
 
         print(f"TRACE: %02X | %02X %02X %02X |" % (
             self.pc,
-            #self.fl,
+            self.fl,
             #self.ie,
             self.ram_read(self.pc),
             self.ram_read(self.pc + 1),
@@ -105,16 +186,100 @@ class CPU:
 
     def run(self):
         """Run the CPU."""
-        while self.halted is False:
-            ir = self.ram_read(self.pc) #Instruction register
-            operand_a = self.ram_read(self.pc + 1)
-            operand_b = self.ram_read(self.pc + 2)
-            if ir == HLT:
-                self.halted = True
-                self.pc += 1
-            elif ir == PRN:
-                print(self.reg[operand_a])
-                self.pc += 2
-            elif ir == LDI:
-                self.reg[operand_a] = operand_b
-                self.pc += 3
+        while self.halted is False: #Presumes activation
+            #Collects next instruction
+            self.ir = self.ram_read(self.pc) #Instruction register
+
+            if self.ir in self.branchtable:
+                self.branchtable[self.ir]()
+            else:
+                print(f"Error: Could not find instruction {self.ir} in branchtable.")
+                sys.exit(1)
+            if not self.instruction_sets_pc:
+                self.pc += self.instruction_size
+    
+    #Branchtable Commands. Might be a way to use the ALU.
+    def execute_HLT(self):
+        #Runs the HLT command.
+        self.halted = True
+    
+    def execute_LDI(self):
+        #Write ram command, only targets register.
+        self.reg[self.operand_a] = self.operand_b
+        #self.pc += 3
+
+    def execute_PRN(self):
+        #Prints item from register.
+        print(self.reg[self.operand_a])
+        #self.pc += 2
+    
+    def execute_MUL(self):
+        #Multiplies the operand_a and operand_b values.
+        #self.reg[self.operand_a] *= self.reg[self.operand_b]
+        self.alu("MUL", self.operand_a, self.operand_b)
+        #self.pc += 3
+    
+    def execute_PUSH(self):
+        #Takes something from the register and moves it to ram.
+        #Stack pointer becomes the address.
+        self.sp -= 1
+        self.mdr = self.reg[self.operand_a]
+        self.ram_write(self.sp, self.mdr)
+        #self.pc += 2
+
+    def execute_POP(self):
+        #Changes item in register from ram value.
+        #Stack pointer is ram address.
+        self.mdr = self.ram_read(self.sp)
+        self.reg[self.operand_a] = self.mdr 
+        self.sp += 1
+        #self.pc += 2
+
+    def execute_CALL(self):
+        #Writes item to ram from stack pointer value. Program counter + instruction_size is value.
+        #Iterates the program counter by the value at register operand_a
+        self.sp -= 1
+        self.ram_write(self.sp, self.pc + self.instruction_size)
+        self.pc = self.reg[self.operand_a]
+
+    def execute_RET(self):
+        #Sets program counter to ram value at stack counter address.
+        self.pc = self.ram_read(self.sp)
+        self.sp += 1
+
+    def execute_ADD(self):
+        #Adds operand_a and operand_b together.
+        #self.reg[self.operand_a] += self.reg[self.operand_b]
+        self.alu("ADD", self.operand_a, self.operand_b)
+        #self.pc += 3
+
+    def execute_JMP(self):
+        #Causes to program counter to go to the operand_a value in memory.
+        self.pc = self.reg[self.operand_a]
+    
+    def execute_JEQ(self):
+        #If the equal flag is set to true, jump.
+        if self.fl:
+            self.execute_JMP()
+        else:
+            self.pc += 2
+        
+    def execute_JNE(self):
+        #If the equal flag isn't true, jump.
+        if not self.fl:
+            self.execute_JMP()
+        else:
+            self.pc += 2
+
+    def execute_CMP(self):
+        #Compare two values. Set a flag with answer.
+        self.alu("CMP", self.operand_a, self.operand_b)
+        #self.pc += 3
+    
+    def execute_AST(self):
+        asts = ''
+        x = self.reg[self.operand_a]
+        for _ in range(x):
+            asts += '*'
+        print(asts)
+
