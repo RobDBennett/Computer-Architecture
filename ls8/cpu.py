@@ -56,8 +56,8 @@ class CPU:
         self.pc = 0 #Program Counter: address of currently executing instruction
         self.ir = 0 #Instruction Register: contains a copy of the currently executing instruction
         self.mar = 0 #Memory Address Register: holds the memory address we're read/writing.
-        self.mdr = 0 #Memory Data RegisterL holds the value to write or the value to read.
-        self.fl = 0 #Flag Register: holds the current flags status *might change
+        self.mdr = 0 #Memory Data Register: holds the value to write or the value to read.
+        self.fl = 0b00000000 #Flag Register: holds the current flags status *might change
         self.halted = False
 
         #Initialize the Stack Pointer
@@ -142,22 +142,6 @@ class CPU:
 
     def load(self):
         """Load a program into memory.
-        Classnotes-
-        address = 0
-        with open("program1.txt") as f:
-            for line in f:
-                line = line.strip()
-                if line == '' or line[0] == "#":
-                    continue
-                try:
-                    str_value = line.split("#")[0]
-                    value = int(str_value)
-                
-                except ValueError:
-                    print(f"Invalid number: {str_value}")
-                    sys.exit(1)
-                memory[address] = value
-                address += 1
         """
         if len(sys.argv) != 2:
             print('Invalid number of args')
@@ -201,9 +185,6 @@ class CPU:
 
             elif self.reg[reg_a] < self.reg[reg_b]:
                 self.fl = 0b000000100
-
-            else:
-                self.fl = 0b00000000
         
         elif op == "SUB":
             self.reg[reg_a] -= self.reg[reg_b]
@@ -260,7 +241,7 @@ class CPU:
 
     def run(self):
         """Run the CPU."""
-        prev_time = datetime.now()
+        #prev_time = datetime.now()
         while self.halted is False: #Presumes activation
             
             #Collects next instruction
