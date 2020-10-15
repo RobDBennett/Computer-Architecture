@@ -17,7 +17,17 @@ JEQ = 0b01010101
 JNE = 0b01010110
 CMP = 0b10100111
 AST = 0b01001111 #Raw creation. 1 operations (01). Not ALU (0). Not pointer(0).1111 for ease.
-
+SUB = 0b10100001
+DIV = 0b10100011
+MOD = 0b10100100
+OR = 0b10101010
+XOR = 0b10101011
+NOT = 0b01101001
+SHL = 0b10101100
+SHR = 0b10101101
+ST = 0b10000100 #TODO
+PRA = 0b01001000 #TODO
+IRET = 0b00010011 #TODO
 
 class CPU:
     """Main CPU class."""
@@ -61,6 +71,14 @@ class CPU:
         self.branchtable[JEQ] = self.execute_JEQ
         self.branchtable[JNE] = self.execute_JNE
         self.branchtable[AST] = self.execute_AST
+        self.branchtable[SUB] = self.execute_SUB
+        self.branchtable[DIV] = self.execute_DIV
+        self.branchtable[MOD] = self.execute_MOD
+        self.branchtable[OR] = self.execute_OR
+        self.branchtable[XOR] = self.execute_XOR
+        self.branchtable[NOT] = self.execute_NOT
+        self.branchtable[SHL] = self.execute_SHL
+        self.branchtable[SHR] = self.execute_SHR
 
     # Property wrapper is very powerful to set/get function.
     @property
@@ -158,9 +176,42 @@ class CPU:
             self.reg[reg_a] *= self.reg[reg_b]
 
         elif op == "CMP":
-            self.fl = 1 if self.reg[reg_a] == self.reg[reg_b] else 0
+            if self.reg[reg_a] == self.reg[reg_b]:
+                self.fl = 0b00000001
+               
+            elif self.reg[reg_a] > self.reg[reg_b]:
+                self.fl = 0b00000010
 
-        #elif op == "SUB": etc
+            elif self.reg[reg_a] < self.reg[reg_b]:
+                self.fl = 0b000000100
+
+            else:
+                self.fl = 0b00000000
+        
+        elif op == "SUB":
+            self.reg[reg_a] -= self.reg[reg_b]
+
+        elif op == "DIV":
+            self.reg[reg_a] /= self.reg[reg_b]
+        
+        elif op == "OR":
+            self.reg[reg_a] = self.reg[reg_a] | self.reg[reg_b]
+        
+        elif op == "XOR":
+            self.reg[reg_a] = self.reg[reg_a] ^ self.reg[reg_b]
+        
+        elif op == "NOT":
+            self.reg[reg_a] = ~self.reg[reg_a]
+        
+        elif op == "SHL":
+            self.reg[reg_a] = self.reg[reg_a] << self.reg[reg_b]
+        
+        elif op == "SHR":
+            self.reg[reg_a] = self.reg[reg_a] >> self.reg[reg_b]
+        
+        elif op == "MOD":
+            self.reg[reg_a] = self.reg[reg_a] % self.reg[reg_b]
+
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -206,18 +257,15 @@ class CPU:
     def execute_LDI(self):
         #Write ram command, only targets register.
         self.reg[self.operand_a] = self.operand_b
-        #self.pc += 3
 
     def execute_PRN(self):
         #Prints item from register.
         print(self.reg[self.operand_a])
-        #self.pc += 2
     
     def execute_MUL(self):
         #Multiplies the operand_a and operand_b values.
         #self.reg[self.operand_a] *= self.reg[self.operand_b]
         self.alu("MUL", self.operand_a, self.operand_b)
-        #self.pc += 3
     
     def execute_PUSH(self):
         #Takes something from the register and moves it to ram.
@@ -225,7 +273,6 @@ class CPU:
         self.sp -= 1
         self.mdr = self.reg[self.operand_a]
         self.ram_write(self.sp, self.mdr)
-        #self.pc += 2
 
     def execute_POP(self):
         #Changes item in register from ram value.
@@ -233,7 +280,6 @@ class CPU:
         self.mdr = self.ram_read(self.sp)
         self.reg[self.operand_a] = self.mdr 
         self.sp += 1
-        #self.pc += 2
 
     def execute_CALL(self):
         #Writes item to ram from stack pointer value. Program counter + instruction_size is value.
@@ -251,7 +297,38 @@ class CPU:
         #Adds operand_a and operand_b together.
         #self.reg[self.operand_a] += self.reg[self.operand_b]
         self.alu("ADD", self.operand_a, self.operand_b)
-        #self.pc += 3
+
+    def execute_SUB(self):
+        #Subracts operand_b from operand_a
+        self.alu("SUB", self.operand_a, self.operand_b)
+
+    def execute_DIV(self):
+        #Divides operand_a by operand_b
+        self.alu("DIV", self.operand_a, self.operand_b)
+    
+    def execute_MOD(self):
+        #Takes the modular of operand_a by operand_b
+        self.alu("MOD", self.operand_a, self.operand_b)
+
+    def execute_OR(self):
+        #Performs OR function on operand_a by operand_b
+        self.alu("OR", self.operand_a, self.operand_b)
+
+    def execute_XOR(self):
+        #Takes the modular of operand_a by operand_b
+        self.alu("XOR", self.operand_a, self.operand_b)
+
+    def execute_NOT(self):
+        #Takes the modular of operand_a by operand_b
+        self.alu("NOT", self.operand_a, self.operand_b)
+
+    def execute_SHL(self):
+        #Takes the modular of operand_a by operand_b
+        self.alu("SHL", self.operand_a, self.operand_b)
+
+    def execute_SHR(self):
+        #Takes the modular of operand_a by operand_b
+        self.alu("SHR", self.operand_a, self.operand_b)
 
     def execute_JMP(self):
         #Causes to program counter to go to the operand_a value in memory.
@@ -259,14 +336,14 @@ class CPU:
     
     def execute_JEQ(self):
         #If the equal flag is set to true, jump.
-        if self.fl:
+        if self.fl == 0b00000001:
             self.execute_JMP()
         else:
             self.pc += 2
         
     def execute_JNE(self):
         #If the equal flag isn't true, jump.
-        if not self.fl:
+        if self.fl != 0b00000001:
             self.execute_JMP()
         else:
             self.pc += 2
@@ -274,12 +351,10 @@ class CPU:
     def execute_CMP(self):
         #Compare two values. Set a flag with answer.
         self.alu("CMP", self.operand_a, self.operand_b)
-        #self.pc += 3
     
     def execute_AST(self):
         asts = ''
-        x = self.reg[self.operand_a]
-        for _ in range(x):
+        for _ in range(self.reg[self.operand_a]):
             asts += '*'
         print(asts)
 
