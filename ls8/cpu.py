@@ -2,6 +2,7 @@
 
 import sys
 import os.path
+from datetime import datetime
 
 HLT  = 0b00000001
 LDI  = 0b10000010
@@ -25,9 +26,17 @@ XOR = 0b10101011
 NOT = 0b01101001
 SHL = 0b10101100
 SHR = 0b10101101
+ADDI = 0b10100101
+AND = 0b10101000
 ST = 0b10000100 #TODO
 PRA = 0b01001000 #TODO
 IRET = 0b00010011 #TODO
+IINT = 0b01010010 #TODO
+
+IM = 5
+IS = 6
+SP = 7
+
 
 class CPU:
     """Main CPU class."""
@@ -55,6 +64,9 @@ class CPU:
         #SP points at the value at the top of the stack (most recently pushed), or at address F4.
         self.reg[7] = 0xF4
 
+        #Test case for interrupts to be functioning.
+        self.interrupts_enabled = True
+
         #Set up Branch Table (will add more as we go):
         self.branchtable = {}
         self.branchtable[HLT] = self.execute_HLT
@@ -79,6 +91,11 @@ class CPU:
         self.branchtable[NOT] = self.execute_NOT
         self.branchtable[SHL] = self.execute_SHL
         self.branchtable[SHR] = self.execute_SHR
+        self.branchtable[ADDI] = self.execute_ADDI
+        self.branchtable[AND] = self.execute_AND
+        self.branchtable[IRET] = self.execute_IRET
+        self.branchtable[PRA] = self.execute_PRA
+        self.branchtable[ST] = self.execute_ST
 
     # Property wrapper is very powerful to set/get function.
     @property
@@ -211,6 +228,12 @@ class CPU:
         
         elif op == "MOD":
             self.reg[reg_a] = self.reg[reg_a] % self.reg[reg_b]
+        
+        elif op == "AND":
+            self.reg[reg_a] = self.reg[reg_a] & self.reg[reg_b]
+
+        elif op == "ADDI":
+            self.reg[reg_a] += reg_b
 
         else:
             raise Exception("Unsupported ALU operation")
@@ -237,7 +260,9 @@ class CPU:
 
     def run(self):
         """Run the CPU."""
+        prev_time = datetime.now()
         while self.halted is False: #Presumes activation
+            
             #Collects next instruction
             self.ir = self.ram_read(self.pc) #Instruction register
 
@@ -280,6 +305,15 @@ class CPU:
         self.mdr = self.ram_read(self.sp)
         self.reg[self.operand_a] = self.mdr 
         self.sp += 1
+
+    def execute_POPI(self):
+        #Pops value at the top of the stack and returns it directly.
+        self.reg[self.sp] +=1
+        return self.ram_read(self.reg[self.sp] -1)
+
+    def execute_ST(self):
+        #Stores value in registerb in the address stored in registera
+        self.ram[self.reg[self.operand_a]] = self.reg[self.operand_b]
 
     def execute_CALL(self):
         #Writes item to ram from stack pointer value. Program counter + instruction_size is value.
@@ -330,6 +364,14 @@ class CPU:
         #Takes the modular of operand_a by operand_b
         self.alu("SHR", self.operand_a, self.operand_b)
 
+    def execute_ADDI(self):
+        #Increases the contents of the given register by the given value.
+        self.alu("SHR", self.operand_a, self.operand_b)
+
+    def execute_AND(self):
+        #Performs and function on operand_a and operand_b
+        self.alu("AND", self.operand_a, self.operand_b)
+
     def execute_JMP(self):
         #Causes to program counter to go to the operand_a value in memory.
         self.pc = self.reg[self.operand_a]
@@ -351,6 +393,19 @@ class CPU:
     def execute_CMP(self):
         #Compare two values. Set a flag with answer.
         self.alu("CMP", self.operand_a, self.operand_b)
+
+    def execute_IRET(self):
+        #Returns from interrupt handler.
+        print("IRET")
+        for _ in reversed(range(7)):
+            self.execute_POP()
+        self.fl = self.execute_POPI()
+        self.pc = self.execute_POPI()
+        self.interrupts_enabled = True
+
+    def execute_PRA(self):
+        #Print alpha character stored in the given register
+        print(chr(self.reg[self.operand_a]), end='')
     
     def execute_AST(self):
         asts = ''
