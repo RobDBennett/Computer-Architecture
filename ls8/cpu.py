@@ -164,7 +164,7 @@ class CPU:
                         print("Can't convert string to number")
                         continue
         except:
-            print(f"Could not find file named: {sys.arg[1]}")
+            print(f"Could not find file named: {sys.argv[1]}")
             sys.exit(1)
 
 
@@ -310,7 +310,7 @@ class CPU:
 
     def execute_PUSHI(self, value):
         self.sp -= 1
-        self.ram_write(value, self.reg[sp])
+        self.ram_write(value, self.reg[self.sp])
 
     def execute_POP(self):
         #Changes item in register from ram value.
