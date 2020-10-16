@@ -1,5 +1,6 @@
 """CPU functionality."""
 
+#import msvcrt
 import sys
 import os.path
 from datetime import datetime
@@ -244,6 +245,33 @@ class CPU:
         #prev_time = datetime.now()
         while self.halted is False: #Presumes activation
             
+            # new_time = datetime.now()
+            # if (new_time - prev_time).total_seconds() >= 1:
+            #     prev_time = new_time
+            #     self.reg[IS] = self.reg[IS] | 0b00000001
+            
+            # if msvcrt.kbhit():
+            #     self.ram_write(ord(msvcrt.getch()), 0xF4)
+            #     self.reg[IS] = self.reg[IS] | 0b00000010
+            
+            # interrupt_happened = False
+            # if self.interrupts_enabled and self.reg[IM] != 0:
+            #     masked_interrupts = self.reg[IM] & self.reg[IS]
+            #     for i in range(8):
+            #         interrupt_happened = ((masked_interrupts >> i) & 1) == 1
+            #         if interrupt_happened:
+            #             self.interrupts_enabled = False
+            #             self.reg[IS] = self.reg[IS] & (0b11111110 << i)
+            #             self.execute_PUSHI(self.pc)
+            #             self.execute_PUSHI(self.fl)
+
+            #             for j in range(7):
+            #                 self.execute_PUSH
+                        
+            #             self.pc = self.ram[0xF8 + i]
+            #             self.ir = self.ram_read(self.pc)
+
+
             #Collects next instruction
             self.ir = self.ram_read(self.pc) #Instruction register
 
@@ -279,6 +307,10 @@ class CPU:
         self.sp -= 1
         self.mdr = self.reg[self.operand_a]
         self.ram_write(self.sp, self.mdr)
+
+    def execute_PUSHI(self, value):
+        self.sp -= 1
+        self.ram_write(value, self.reg[sp])
 
     def execute_POP(self):
         #Changes item in register from ram value.
@@ -386,7 +418,7 @@ class CPU:
 
     def execute_PRA(self):
         #Print alpha character stored in the given register
-        print(chr(self.reg[self.operand_a]), end='')
+        print(chr(self.reg[self.operand_a]), end='', flush=True)
     
     def execute_AST(self):
         asts = ''
