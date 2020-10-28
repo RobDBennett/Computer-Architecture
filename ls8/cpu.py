@@ -38,6 +38,9 @@ IM = 5
 IS = 6
 SP = 7
 
+IS_TIMER = 0b00000001
+IS_KEYBOARD = 0b00000010
+
 
 class CPU:
     """Main CPU class."""
@@ -66,7 +69,8 @@ class CPU:
         self.reg[7] = 0xF4
 
         #Test case for interrupts to be functioning.
-        self.interrupts_enabled = True
+        self.ie = 1
+        self.last_timer_int = None
 
         #Set up Branch Table (will add more as we go):
         self.branchtable = {}
@@ -137,7 +141,9 @@ class CPU:
 
     def ram_write(self, mar, mdr):
         if mar >= 0 and mar < len(self.ram):
-            self.ram[mar] = mdr #& 0xFF
+            self.ram[mar] = mdr & 0xFF
+        elif mar == 17:
+            print("Here it is.")
         else:
             print(f'Error: attempted to write to memory address: {mar}, which is outside the memory.')
 
@@ -220,16 +226,54 @@ class CPU:
         else:
             raise Exception("Unsupported ALU operation")
 
+    def push_val(self, val):
+        self.reg[SP] -= 1
+        self.ram_write(val, self.reg[7])
+
+    def check_for_timer_int(self):
+        #Check the time to see if a timer interrupt should fire.
+        if self.last_timer_int == None:
+            self.last_timer_int = datetime.now()
+        
+        now = datetime.now()
+
+        diff = now - self.last_timer_int
+
+        if diff.seconds >= 1:
+            self.last_timer_int = now
+            self.reg[IS] |= IS_TIMER
+
+    def handle_ints(self):
+        if not self.ie:
+            return
+        
+        masked_interrupts = self.reg[IM] & self.reg[IS]
+        #print(self.ram[248])
+        for i in range(8):
+            if masked_interrupts & (1 << i ):
+                self.ie = 0
+                self.reg[IS] &= ~(1 << i)
+
+                self.push_val(self.pc)
+                self.push_val(self.fl)
+                for r in range(7):
+                    self.push_val(self.reg[r])
+                self.pc = self.ram_read(0xf8 + i)
+                self.operand_a
+                self.operand_b
+                print(self.pc)
+                break
+
     def trace(self):
         """
         Handy function to print out the CPU state. You might want to call this
         from run() if you need help debugging.
         """
 
-        print(f"TRACE: %02X | %02X %02X %02X |" % (
+        print(f"TRACE: %02X %02X %02X | %02X %02X %02X |" % (
             self.pc,
             self.fl,
-            #self.ie,
+            self.ie,
             self.ram_read(self.pc),
             self.ram_read(self.pc + 1),
             self.ram_read(self.pc + 2)
@@ -245,6 +289,10 @@ class CPU:
         #prev_time = datetime.now()
         while self.halted is False: #Presumes activation
             
+            self.check_for_timer_int()
+            #self.check_for_keyboard_int()
+            self.handle_ints()
+            #self.trace()
             # new_time = datetime.now()
             # if (new_time - prev_time).total_seconds() >= 1:
             #     prev_time = new_time
@@ -255,7 +303,7 @@ class CPU:
             #     self.reg[IS] = self.reg[IS] | 0b00000010
             
             # interrupt_happened = False
-            # if self.interrupts_enabled and self.reg[IM] != 0:
+            # if self.ie and self.reg[IM] != 0:
             #     masked_interrupts = self.reg[IM] & self.reg[IS]
             #     for i in range(8):
             #         interrupt_happened = ((masked_interrupts >> i) & 1) == 1
@@ -271,10 +319,10 @@ class CPU:
             #             self.pc = self.ram[0xF8 + i]
             #             self.ir = self.ram_read(self.pc)
 
-
+            #print("instruction 17:", self.ram_read(17))
             #Collects next instruction
             self.ir = self.ram_read(self.pc) #Instruction register
-
+            #print(self.ir)
             if self.ir in self.branchtable:
                 self.branchtable[self.ir]()
             else:
@@ -310,7 +358,7 @@ class CPU:
 
     def execute_PUSHI(self, value):
         self.sp -= 1
-        self.ram_write(value, self.reg[self.sp])
+        self.ram_write(value, self.reg[SP])
 
     def execute_POP(self):
         #Changes item in register from ram value.
@@ -321,8 +369,8 @@ class CPU:
 
     def execute_POPI(self):
         #Pops value at the top of the stack and returns it directly.
-        self.reg[self.sp] +=1
-        return self.ram_read(self.reg[self.sp] -1)
+        self.reg[SP] +=1
+        return self.ram_read(self.reg[SP] -1)
 
     def execute_ST(self):
         #Stores value in registerb in the address stored in registera
